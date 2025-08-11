@@ -9,6 +9,6 @@ Herramienta avanzada para pruebas de penetración y seguridad ofensiva.
 
 ## Instalación
 ```bash
-git clone https://github.com/TU_USUARIO/BlackPython.git
+git clone https://github.com/franquitoloco8/BlackPython.git
 cd BlackPython
 python setup.py
