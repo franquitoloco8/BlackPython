@@ -25,7 +25,7 @@ cd BlackPython
 2. Crea un entorno virtual (para aislar dependencias):
 bash
 
-python -m venv .venv  # Crea el entorno
+python3.10 -m venv .venv  # Crea el entorno
 source .venv/bin/activate  # Linux/macOS
 # O en Windows:
 .venv\Scripts\activate
