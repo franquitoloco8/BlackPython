@@ -3,6 +3,9 @@ from core.android import AndroidPayload
 from core.binder import FileBinder
 import argparse
 
+def bind_to_pdf(original_pdf, payload, output_pdf, ip, port):
+    payload = payload.replace("TU_IP_AQUÍ", ip)  # Reemplaza automáticamente
+
 def main():
     parser = argparse.ArgumentParser(description="BlackPython - Herramienta de Red Team")
     subparsers = parser.add_subparsers(dest="command")
