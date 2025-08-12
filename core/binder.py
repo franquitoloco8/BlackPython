@@ -9,7 +9,7 @@ class FileBinder:
     @staticmethod
     def bind_to_pdf(original_pdf, payload, output_pdf, debug=False):
         """
-        Versión mejorada que:
+        Versión corregida para PyPDF2>=3.0.0 que:
         1. Adjunta el payload como archivo
         2. Inyecta en metadatos
         3. Es compatible con PDFs complejos
@@ -40,13 +40,8 @@ class FileBinder:
                 for page in reader.pages:
                     writer.add_page(page)
 
-                # 2. Añadir payload como archivo adjunto
-                writer.add_attachment(
-                    filename="payload.py",
-                    data=payload.encode(),
-                    creation_date="20230101000000",
-                    modification_date="20230101000000"
-                )
+                # 2. Añadir payload como archivo adjunto (nueva API)
+                writer.add_attachment("payload.py", payload.encode())
 
                 # 3. Inyectar en metadatos (formato ofuscado)
                 metadata = reader.metadata or {}
@@ -161,12 +156,15 @@ class FileBinder:
             if file_path.endswith('.pdf'):
                 with open(file_path, 'rb') as f:
                     reader = PdfReader(f)
-                    attachments = reader.attachments
+                    attachments = []
+                    # Nueva forma de obtener attachments en PyPDF2>=3.0.0
+                    if hasattr(reader, 'attachments'):
+                        attachments = list(reader.attachments.values())
                     metadata = reader.metadata
                     
                     if debug:
                         print("\n[VERIFICACIÓN PDF]")
-                        print(f"Adjuntos: {len(attachments or [])}")
+                        print(f"Adjuntos: {len(attachments)}")
                         print(f"Metadatos: {metadata}")
                         
                     return bool(attachments)
